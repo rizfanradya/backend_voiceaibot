@@ -6,13 +6,12 @@ from transcribe.assembly_ai import transcribe_assembly_ai
 
 
 if __name__ == "__main__":
-    audio_elevenlabs(
-        "Thank you for calling, how may I assist you?"
-    )
+    # audio_elevenlabs(
+    #     "Thank you for calling, how may I assist you?"
+    # )
 
     # transcribe assemblyai
-    transcribe_aai = transcribe_assembly_ai()
-    print(f"transcribe : {transcribe_aai} \n")
+    transcribe_assembly_ai()
 
     # transcribe speechtext
     # record_audio(duration=5)
@@ -25,8 +24,8 @@ if __name__ == "__main__":
     # print(f"natural language processing : {nlp} \n")
 
     # nlp openai
-    nlp = nlp_openai(transcribe_aai)
-    print(f"natural language processing : {nlp} \n")
+    # nlp = nlp_openai(transcribe_aai)
+    # print(f"natural language processing : {nlp} \n")
 
     # audio elevenlabs
-    audio_elevenlabs(nlp)
+    # audio_elevenlabs(nlp)

@@ -1,5 +1,7 @@
 import assemblyai as aai
 from utils.config import ASSEMBLYAI_API_KEY
+from nlp.open_ai import nlp_openai
+from audio.elevenlabs_ai import audio_elevenlabs
 
 
 def transcribe_assembly_ai():
@@ -22,6 +24,8 @@ def transcribe_assembly_ai():
         if isinstance(transcript, aai.RealtimeFinalTranscript):
             print("Final transcript:", transcript.text)
             final_transcript.append(transcript.text)
+            nlp = nlp_openai(transcript.text)
+            audio_elevenlabs(nlp)
         else:
             print(transcript.text, end="\r")
 
