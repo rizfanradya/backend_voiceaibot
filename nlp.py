@@ -1,10 +1,10 @@
-from openai import OpenAI
-from config import OPENAI_API_KEY
+from config import HUGGING_FACE_API_KEY
+from requests import post
 
 
-def openai_nlp(full_transcript):
-    openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    return openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=full_transcript
-    )
+def natural_language_processing(question):
+    headers = {"Authorization": f"Bearer {HUGGING_FACE_API_KEY}"}
+    api_url = "https://api-inference.huggingface.co/models/gpt2"
+    payload = {"inputs": question}
+    response = post(api_url, headers=headers, json=payload).json()
+    return response[0]["generated_text"]
