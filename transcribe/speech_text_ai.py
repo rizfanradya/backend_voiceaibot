@@ -1,6 +1,6 @@
 import requests
 import time
-from config import SPEECHTEXTAI_API_KEY
+from utils.config import SPEECHTEXTAI_API_KEY
 import sounddevice as sd
 import scipy.io.wavfile as wav
 
@@ -18,7 +18,7 @@ def record_audio(duration=5, sample_rate=16000, filename="recorded.wav"):
     print(f"Recording saved as {filename}")
 
 
-def transcription(audio_file="recorded.wav"):
+def transcribe_speech_text(audio_file="recorded.wav"):
     with open(audio_file, mode="rb") as file:
         post_body = file.read()
 
