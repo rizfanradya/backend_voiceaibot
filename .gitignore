@@ -163,4 +163,4 @@ cython_debug/
 versions
 uploads
 ~$*
-app.py
+*service_account.json
