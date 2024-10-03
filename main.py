@@ -13,6 +13,9 @@ if __name__ == "__main__":
 
     # transcribe assemblyai
     transcribe_aai = transcribe_assembly_ai()
+    #     "Halo, bagaimana kabarmu?"
+    # )
+    # transcribe_assembly_ai()
 
     # transcribe speechtext
     # record_audio(duration=5)
