@@ -5,7 +5,10 @@ from audio.elevenlabs_ai import audio_elevenlabs
 
 
 def transcribe_assembly_ai():
-    aai.settings.api_key = ASSEMBLYAI_API_KEY
+    aai.settings.api_key = ASSEMBLYAI_API_KEY   
+    # config = aai.TranscriptionConfig(language_code="id", speech_model=aai.SpeechModel.nano)
+    # transcriber = aai.Transcriber(config=config)
+
     final_transcript = []
 
     def on_open(session_opened: aai.RealtimeSessionOpened):
@@ -25,6 +28,7 @@ def transcribe_assembly_ai():
             print("Final transcript:", transcript.text)
             final_transcript.append(transcript.text)
             nlp = nlp_openai(transcript.text)
+            print("ChatGPT Response:", nlp)
             audio_elevenlabs(nlp)
         else:
             print(transcript.text, end="\r")
