@@ -22,3 +22,4 @@ elevenlabs
 assemblyai[extras]
 deepgram-sdk
 python-dotenv
+websocket-client

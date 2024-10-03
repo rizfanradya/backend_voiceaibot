@@ -1,98 +1,70 @@
-# Example filename: main.py
-import os
-import httpx
-from dotenv import load_dotenv
-import threading
+import pyaudio
+from rev_ai.models import MediaConfig
+from rev_ai.streamingclient import RevAiStreamingClient
+import six
 
-from deepgram import (
-    DeepgramClient,
-    LiveTranscriptionEvents,
-    LiveOptions,
-)
-
-load_dotenv()
-
-# URL for the realtime streaming audio you would like to transcribe
-URL = "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service"
-
-API_KEY = os.getenv("DG_API_KEY")
+access_token = "02lFdZhFJJR-Eg74Bgitj0Ud9UXb6HFoss3vupOeyKKvJ9S0U_2X4xo4OZaErkr9KZmdsTp_17_TBj68GpLMRVExLImVg"
 
 
-def main():
-    try:
-        # STEP 1: Create a Deepgram client using the API key
-        deepgram = DeepgramClient('6c9f0b95127b16b4d5b7e62932ad7c7fbb2adf73')
+class MicrophoneStream(object):
+    def __init__(self, rate, chunk):
+        self._rate = rate
+        self._chunk = chunk
+        self._buff = six.moves.queue.Queue()
+        self.closed = True
 
-        # STEP 2: Create a websocket connection to Deepgram
-        dg_connection = deepgram.listen.live.v("1")
-
-        # STEP 3: Define the event handlers for the connection
-        def on_message(self, result, **kwargs):
-            sentence = result.channel.alternatives[0].transcript
-            if len(sentence) == 0:
-                return
-            print(f"speaker: {sentence}")
-
-        def on_metadata(self, metadata, **kwargs):
-            print(f"\n\n{metadata}\n\n")
-
-        def on_error(self, error, **kwargs):
-            print(f"\n\n{error}\n\n")
-
-        # STEP 4: Register the event handlers
-        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
-        dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
-        dg_connection.on(LiveTranscriptionEvents.Error, on_error)
-
-        # STEP 5: Configure Deepgram options for live transcription
-        options = LiveOptions(
-            model="nova-2",
-            language="en-US",
-            smart_format=True,
+    def __enter__(self):
+        self._audio_interface = pyaudio.PyAudio()
+        self._audio_stream = self._audio_interface.open(
+            format=pyaudio.paInt16,
+            channels=1, rate=self._rate,
+            input=True, frames_per_buffer=self._chunk,
+            stream_callback=self._fill_buffer,
         )
+        self.closed = False
+        return self
 
-        # STEP 6: Start the connection
-        dg_connection.start(options)
+    def __exit__(self, type, value, traceback):
+        self._audio_stream.stop_stream()
+        self._audio_stream.close()
+        self.closed = True
+        self._buff.put(None)
+        self._audio_interface.terminate()
 
-        # STEP 7: Create a lock and a flag for thread synchronization
-        lock_exit = threading.Lock()
-        exit = False
+    def _fill_buffer(self, in_data, frame_count, time_info, status_flags):
+        self._buff.put(in_data)
+        return None, pyaudio.paContinue
 
-        # STEP 8: Define a thread that streams the audio and sends it to Deepgram
-        def myThread():
-            with httpx.stream("GET", URL) as r:
-                for data in r.iter_bytes():
-                    lock_exit.acquire()
-                    if exit:
-                        break
-                    lock_exit.release()
-
-                    dg_connection.send(data)
-
-        # STEP 9: Start the thread
-        myHttp = threading.Thread(target=myThread)
-        myHttp.start()
-
-        # STEP 10: Wait for user input to stop recording
-        input("Press Enter to stop recording...\n\n")
-
-        # STEP 11: Set the exit flag to True to stop the thread
-        lock_exit.acquire()
-        exit = True
-        lock_exit.release()
-
-        # STEP 12: Wait for the thread to finish
-        myHttp.join()
-
-        # STEP 13: Close the connection to Deepgram
-        dg_connection.finish()
-
-        print("Finished")
-
-    except Exception as e:
-        print(f"Could not open socket: {e}")
-        return
+    def generator(self):
+        while not self.closed:
+            chunk = self._buff.get()
+            if chunk is None:
+                return
+            data = [chunk]
+            while True:
+                try:
+                    chunk = self._buff.get(block=False)
+                    if chunk is None:
+                        return
+                    data.append(chunk)
+                except six.moves.queue.Empty:
+                    break
+            yield b''.join(data)
 
 
-if __name__ == "__main__":
-    main()
+rate = 44100
+chunk = int(rate/10)
+example_mc = MediaConfig('audio/pcm', 'interleaved', rate, 'S16LE', 1)
+streamclient = RevAiStreamingClient(access_token, example_mc)
+
+with MicrophoneStream(rate, chunk) as stream:
+    try:
+        response_gen = streamclient.start(stream.generator())
+        for response in response_gen:
+            print(response)
+    except KeyboardInterrupt:
+        print("Pengguna menghentikan proses.")
+    except Exception as error:
+        print(f"Kesalahan: {error}")
+    finally:
+        streamclient.end()
