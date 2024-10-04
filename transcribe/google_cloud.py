@@ -4,9 +4,15 @@ import re
 import sys
 from google.cloud import speech
 import pyaudio
+from elevenlabs.client import ElevenLabs
+from elevenlabs import (
+    VoiceSettings,
+    stream
+)
+import openai
+from utils.config import OPENAI_API_KEY, ELEVENLABS_API_KEY
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "voice_ai_bot_service_account.json"
-
 RATE = 16000
 CHUNK = int(RATE / 10)  # 100ms
 
@@ -86,14 +92,52 @@ def listen_print_loop(responses: object) -> str:
             num_chars_printed = len(transcript)
         else:
             print(transcript + overwrite_chars)
+
+            # nlp openai
+            try:
+                openai.api_key = OPENAI_API_KEY
+                openai_client = openai
+                response = openai_client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": transcript
+                        }
+                    ]
+                )
+                response_openai = response.choices[0].message.content
+                print("OpenAI Response:", response_openai)
+
+                # text to speech elevenlabs
+                try:
+                    audio_stream = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+                    response = audio_stream.text_to_speech.convert(
+                        # voice_id="pNInz6obpgDQGcFmaJgB",
+                        voice_id="EXAVITQu4vr4xnSDxMaL",
+                        output_format="mp3_22050_32",
+                        text=response_openai,
+                        model_id="eleven_multilingual_v2",
+                        voice_settings=VoiceSettings(
+                            stability=0.8,
+                            similarity_boost=1.0,
+                            style=0.0,
+                            use_speaker_boost=True,
+                        ),
+                    )
+                    stream(response)
+                except Exception as error:
+                    print(error)
+            except Exception as error:
+                print(error)
+
             if re.search(r"\b(exit|quit)\b", transcript, re.I):
                 print("Exiting..")
                 break
             num_chars_printed = 0
-    return transcript
 
 
-def main() -> None:
+if __name__ == "__main__":
     try:
         language_code = "id-ID"
         client = speech.SpeechClient()
@@ -113,10 +157,65 @@ def main() -> None:
                 for content in audio_generator
             )
             responses = client.streaming_recognize(streaming_config, requests)
-            listen_print_loop(responses)
+
+            num_chars_printed = 0
+            for response in responses:
+                if not response.results:
+                    continue
+                result = response.results[0]
+                if not result.alternatives:
+                    continue
+                transcript = result.alternatives[0].transcript
+                overwrite_chars = " " * (num_chars_printed - len(transcript))
+                if not result.is_final:
+                    sys.stdout.write(transcript + overwrite_chars + "\r")
+                    sys.stdout.flush()
+                    num_chars_printed = len(transcript)
+                else:
+                    print(transcript + overwrite_chars)
+
+                    # nlp openai
+                    try:
+                        openai.api_key = OPENAI_API_KEY
+                        openai_client = openai
+                        response = openai_client.chat.completions.create(
+                            model="gpt-3.5-turbo",
+                            messages=[
+                                {
+                                    "role": "user",
+                                    "content": transcript
+                                }
+                            ]
+                        )
+                        response_openai = response.choices[0].message.content
+                        print("OpenAI Response:", response_openai)
+
+                        # text to speech elevenlabs
+                        try:
+                            audio_stream = ElevenLabs(
+                                api_key=ELEVENLABS_API_KEY)
+                            response = audio_stream.text_to_speech.convert(
+                                # voice_id="pNInz6obpgDQGcFmaJgB",
+                                voice_id="EXAVITQu4vr4xnSDxMaL",
+                                output_format="mp3_22050_32",
+                                text=response_openai,
+                                model_id="eleven_multilingual_v2",
+                                voice_settings=VoiceSettings(
+                                    stability=0.8,
+                                    similarity_boost=1.0,
+                                    style=0.0,
+                                    use_speaker_boost=True,
+                                ),
+                            )
+                            stream(response)
+                        except Exception as error:
+                            print(error)
+                    except Exception as error:
+                        print(error)
+
+                    if re.search(r"\b(exit|quit)\b", transcript, re.I):
+                        print("Exiting..")
+                        break
+                    num_chars_printed = 0
     except KeyboardInterrupt:
         print("\nClose Session...")
-
-
-if __name__ == "__main__":
-    main()
