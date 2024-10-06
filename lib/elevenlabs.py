@@ -7,7 +7,6 @@ from utils.config import ELEVENLABS_API_KEY
 
 
 def audio_elevenlabs(text):
-    from transcribe.assembly_ai import transcribe_assembly_ai
     try:
         audio_stream = ElevenLabs(api_key=ELEVENLABS_API_KEY)
         response = audio_stream.text_to_speech.convert(
@@ -24,6 +23,5 @@ def audio_elevenlabs(text):
             ),
         )
         stream(response)
-        transcribe_assembly_ai()
     except Exception as error:
         print(error)
