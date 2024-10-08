@@ -4,11 +4,12 @@ import re
 import sys
 from google.cloud import speech, texttospeech
 import pyaudio
-import openai
-from utils.config import OPENAI_API_KEY
+from utils.config import GEMINIAI_API_KEY
 from pyaudio import PyAudio, paInt16
+import google.generativeai as genai
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "lib/voice_ai_bot_service_account.json"
+genai.configure(api_key=GEMINIAI_API_KEY)
 RATE = 16000
 CHUNK = int(RATE / 10)  # 100ms
 
@@ -111,24 +112,14 @@ def googlecloud_only():
 
                 # nlp
                 try:
-                    openai.api_key = OPENAI_API_KEY
-                    openai_client = openai
-                    response = openai_client.chat.completions.create(
-                        model="gpt-3.5-turbo",
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": transcript
-                            }
-                        ]
-                    )
-                    response_openai = response.choices[0].message.content
-                    print("OpenAI Response:", response_openai)
+                    model_genai = genai.GenerativeModel("gemini-1.5-flash")
+                    response_genai = model_genai.generate_content(transcript)
+                    print("GeminiAI Response:", response_genai.text)
 
                     # text to speech
                     try:
                         synthesis_input = texttospeech.SynthesisInput(
-                            text=response_openai
+                            text=response_genai.text
                         )
                         voice = texttospeech.VoiceSelectionParams(
                             language_code='id-ID',
