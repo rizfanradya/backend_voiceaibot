@@ -25,3 +25,4 @@ python-dotenv
 websocket-client
 google-cloud-speech
 google-generativeai
+google-cloud-texttospeech

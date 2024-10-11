@@ -118,8 +118,9 @@ def googlecloud_only():
 
                     # text to speech
                     try:
+                        cleaned_text = re.sub(r"[^\w\s]", "", response_genai.text)
                         synthesis_input = texttospeech.SynthesisInput(
-                            text=response_genai.text
+                            text=cleaned_text
                         )
                         voice = texttospeech.VoiceSelectionParams(
                             language_code='id-ID',
