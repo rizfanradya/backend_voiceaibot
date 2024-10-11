@@ -2,8 +2,10 @@ import os
 import queue
 import re
 import sys
+import signal
 from google.cloud import speech, texttospeech
 import pyaudio
+import threading
 from utils.config import GEMINIAI_API_KEY
 from pyaudio import PyAudio, paInt16
 import google.generativeai as genai
@@ -12,6 +14,17 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "lib/voice_ai_bot_service_account
 genai.configure(api_key=GEMINIAI_API_KEY)
 RATE = 16000
 CHUNK = int(RATE / 10)  # 100ms
+stop_flag = False
+
+
+def signal_handler(sig, frame):
+    print("\nClose Session...")
+    global stop_flag
+    stop_flag = True
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
 
 
 class MicrophoneStream:
@@ -73,10 +86,77 @@ class MicrophoneStream:
             yield b"".join(data)
 
 
+def process_responses(responses):
+    tts_client = texttospeech.TextToSpeechClient()
+    num_chars_printed = 0
+    for response in responses:
+        # if stop_flag:
+        #     break
+        if not response.results:
+            continue
+        result = response.results[0]
+        if not result.alternatives:
+            continue
+        transcript = result.alternatives[0].transcript
+        overwrite_chars = " " * (num_chars_printed - len(transcript))
+        if not result.is_final:
+            sys.stdout.write(transcript + overwrite_chars + "\r")
+            sys.stdout.flush()
+            num_chars_printed = len(transcript)
+        else:
+            print(transcript + overwrite_chars)
+
+            # nlp
+            try:
+                model_genai = genai.GenerativeModel("gemini-1.5-flash")
+                response_genai = model_genai.generate_content(transcript)
+                print("GeminiAI Response:", response_genai.text)
+
+                # text to speech
+                try:
+                    cleaned_text = re.sub(
+                        r"[^\w\s]", "", response_genai.text)
+                    synthesis_input = texttospeech.SynthesisInput(
+                        text=cleaned_text
+                    )
+                    voice = texttospeech.VoiceSelectionParams(
+                        language_code='id-ID',
+                        name='id-ID-Wavenet-D'
+                    )
+                    audio_config = texttospeech.AudioConfig(
+                        audio_encoding=texttospeech.AudioEncoding.LINEAR16,
+                        sample_rate_hertz=16000
+                    )
+                    tts_response = tts_client.synthesize_speech(
+                        input=synthesis_input,
+                        voice=voice,
+                        audio_config=audio_config
+                    )
+                    p_audio = PyAudio()
+                    tts_stream = p_audio.open(
+                        format=paInt16,
+                        channels=1,
+                        rate=16000,
+                        output=True
+                    )
+                    tts_stream.write(tts_response.audio_content)
+                    tts_stream.stop_stream()
+                    tts_stream.close()
+                    p_audio.terminate()
+                except Exception as error:
+                    print(error)
+            except Exception as error:
+                print(error)
+
+            if re.search(r"\b(exit|quit)\b", transcript, re.I):
+                print("Exiting..")
+                break
+            num_chars_printed = 0
+
+
 def googlecloud_only():
     language_code = "id-ID"
     stt_client = speech.SpeechClient()
-    tts_client = texttospeech.TextToSpeechClient()
     config = speech.RecognitionConfig(
         encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
         sample_rate_hertz=RATE,
@@ -93,65 +173,11 @@ def googlecloud_only():
             for content in audio_generator
         )
         responses = stt_client.streaming_recognize(streaming_config, requests)
-
-        num_chars_printed = 0
-        for response in responses:
-            if not response.results:
-                continue
-            result = response.results[0]
-            if not result.alternatives:
-                continue
-            transcript = result.alternatives[0].transcript
-            overwrite_chars = " " * (num_chars_printed - len(transcript))
-            if not result.is_final:
-                sys.stdout.write(transcript + overwrite_chars + "\r")
-                sys.stdout.flush()
-                num_chars_printed = len(transcript)
-            else:
-                print(transcript + overwrite_chars)
-
-                # nlp
-                try:
-                    model_genai = genai.GenerativeModel("gemini-1.5-flash")
-                    response_genai = model_genai.generate_content(transcript)
-                    print("GeminiAI Response:", response_genai.text)
-
-                    # text to speech
-                    try:
-                        cleaned_text = re.sub(r"[^\w\s]", "", response_genai.text)
-                        synthesis_input = texttospeech.SynthesisInput(
-                            text=cleaned_text
-                        )
-                        voice = texttospeech.VoiceSelectionParams(
-                            language_code='id-ID',
-                            name='id-ID-Wavenet-D'
-                        )
-                        audio_config = texttospeech.AudioConfig(
-                            audio_encoding=texttospeech.AudioEncoding.LINEAR16,
-                            sample_rate_hertz=16000
-                        )
-                        tts_response = tts_client.synthesize_speech(
-                            input=synthesis_input,
-                            voice=voice,
-                            audio_config=audio_config
-                        )
-                        p_audio = PyAudio()
-                        tts_stream = p_audio.open(
-                            format=paInt16,
-                            channels=1,
-                            rate=16000,
-                            output=True
-                        )
-                        tts_stream.write(tts_response.audio_content)
-                        tts_stream.stop_stream()
-                        tts_stream.close()
-                        p_audio.terminate()
-                    except Exception as error:
-                        print(error)
-                except Exception as error:
-                    print(error)
-
-                if re.search(r"\b(exit|quit)\b", transcript, re.I):
-                    print("Exiting..")
-                    break
-                num_chars_printed = 0
+        response_thread = threading.Thread(
+            target=process_responses,
+            args=(responses,),
+            daemon=True
+        )
+        response_thread.start()
+        while not stop_flag:
+            response_thread.join(timeout=0.1)
